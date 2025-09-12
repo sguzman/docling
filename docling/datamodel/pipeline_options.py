@@ -37,6 +37,7 @@ from docling.datamodel.pipeline_options_vlm_model import (
 from docling.datamodel.vlm_model_specs import (
     GRANITE_VISION_OLLAMA as granite_vision_vlm_ollama_conversion_options,
     GRANITE_VISION_TRANSFORMERS as granite_vision_vlm_conversion_options,
+    NU_EXTRACT_2B_TRANSFORMERS,
     SMOLDOCLING_MLX as smoldocling_vlm_mlx_conversion_options,
     SMOLDOCLING_TRANSFORMERS as smoldocling_vlm_conversion_options,
     VlmModelType,
@@ -99,6 +100,8 @@ class RapidOcrOptions(OcrOptions):
     # For more details on the following options visit
     # https://rapidai.github.io/RapidOCRDocs/install_usage/api/RapidOCR/
 
+    # https://rapidai.github.io/RapidOCRDocs/main/install_usage/rapidocr/usage/#__tabbed_3_4
+    backend: Literal["onnxruntime", "openvino", "paddle", "torch"] = "onnxruntime"
     text_score: float = 0.5  # same default as rapidocr
 
     use_det: Optional[bool] = None  # same default as rapidocr
@@ -111,6 +114,7 @@ class RapidOcrOptions(OcrOptions):
     cls_model_path: Optional[str] = None  # same default as rapidocr
     rec_model_path: Optional[str] = None  # same default as rapidocr
     rec_keys_path: Optional[str] = None  # same default as rapidocr
+    rec_font_path: Optional[str] = None  # same default as rapidocr
 
     model_config = ConfigDict(
         extra="forbid",
@@ -130,6 +134,8 @@ class EasyOcrOptions(OcrOptions):
     model_storage_directory: Optional[str] = None
     recog_network: Optional[str] = "standard"
     download_enabled: bool = True
+
+    suppress_mps_warnings: bool = True
 
     model_config = ConfigDict(
         extra="forbid",
@@ -233,7 +239,9 @@ class PdfBackend(str, Enum):
 
 
 # Define an enum for the ocr engines
-@deprecated("Use ocr_factory.registered_enum")
+@deprecated(
+    "Use get_ocr_factory().registered_kind to get a list of registered OCR engines."
+)
 class OcrEngine(str, Enum):
     """Enum of valid OCR engines."""
 
@@ -244,21 +252,28 @@ class OcrEngine(str, Enum):
     RAPIDOCR = "rapidocr"
 
 
-class PipelineOptions(BaseModel):
+class PipelineOptions(BaseOptions):
     """Base pipeline options."""
 
-    create_legacy_output: bool = (
-        True  # This default will be set to False on a future version of docling
-    )
     document_timeout: Optional[float] = None
     accelerator_options: AcceleratorOptions = AcceleratorOptions()
     enable_remote_services: bool = False
     allow_external_plugins: bool = False
-
-
-class PaginatedPipelineOptions(PipelineOptions):
     artifacts_path: Optional[Union[Path, str]] = None
 
+
+class ConvertPipelineOptions(PipelineOptions):
+    """Base convert pipeline options."""
+
+    do_picture_classification: bool = False  # True: classify pictures in documents
+
+    do_picture_description: bool = False  # True: run describe pictures in documents
+    picture_description_options: PictureDescriptionBaseOptions = (
+        smolvlm_picture_description
+    )
+
+
+class PaginatedPipelineOptions(ConvertPipelineOptions):
     images_scale: float = 1.0
     generate_page_images: bool = False
     generate_picture_images: bool = False
@@ -282,12 +297,20 @@ class LayoutOptions(BaseModel):
     keep_empty_clusters: bool = (
         False  # Whether to keep clusters that contain no text cells
     )
-    model_spec: LayoutModelConfig = DOCLING_LAYOUT_V2
+    model_spec: LayoutModelConfig = DOCLING_LAYOUT_HERON
+    skip_cell_assignment: bool = (
+        False  # Skip cell-to-cluster assignment for VLM-only processing
+    )
 
 
 class AsrPipelineOptions(PipelineOptions):
     asr_options: Union[InlineAsrOptions] = asr_model_specs.WHISPER_TINY
-    artifacts_path: Optional[Union[Path, str]] = None
+
+
+class VlmExtractionPipelineOptions(PipelineOptions):
+    """Options for extraction pipeline."""
+
+    vlm_options: Union[InlineVlmOptions] = NU_EXTRACT_2B_TRANSFORMERS
 
 
 class PdfPipelineOptions(PaginatedPipelineOptions):
@@ -297,8 +320,6 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
     do_ocr: bool = True  # True: perform OCR, replace programmatic PDF text
     do_code_enrichment: bool = False  # True: perform code OCR
     do_formula_enrichment: bool = False  # True: perform formula OCR, return Latex code
-    do_picture_classification: bool = False  # True: classify pictures in documents
-    do_picture_description: bool = False  # True: run describe pictures in documents
     force_backend_text: bool = (
         False  # (To be used with vlms, or other generative models)
     )
@@ -306,9 +327,6 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
 
     table_structure_options: TableStructureOptions = TableStructureOptions()
     ocr_options: OcrOptions = EasyOcrOptions()
-    picture_description_options: PictureDescriptionBaseOptions = (
-        smolvlm_picture_description
-    )
     layout_options: LayoutOptions = LayoutOptions()
 
     images_scale: float = 1.0
@@ -323,12 +341,25 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
         ),
     )
 
-    generate_parsed_pages: Literal[True] = (
-        True  # Always True since parsed_page is now mandatory
-    )
+    generate_parsed_pages: bool = False
 
 
 class ProcessingPipeline(str, Enum):
     STANDARD = "standard"
     VLM = "vlm"
     ASR = "asr"
+
+
+class ThreadedPdfPipelineOptions(PdfPipelineOptions):
+    """Pipeline options for the threaded PDF pipeline with batching and backpressure control"""
+
+    # Batch sizes for different stages
+    ocr_batch_size: int = 4
+    layout_batch_size: int = 4
+    table_batch_size: int = 4
+
+    # Timing control
+    batch_timeout_seconds: float = 2.0
+
+    # Backpressure and queue control
+    queue_max_size: int = 100

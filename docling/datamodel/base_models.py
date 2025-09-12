@@ -1,7 +1,7 @@
 import math
 from collections import defaultdict
 from enum import Enum
-from typing import TYPE_CHECKING, Annotated, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Type, Union
 
 import numpy as np
 from docling_core.types.doc import (
@@ -32,6 +32,18 @@ from pydantic import (
 if TYPE_CHECKING:
     from docling.backend.pdf_backend import PdfPageBackend
 
+from docling.backend.abstract_backend import AbstractDocumentBackend
+from docling.datamodel.pipeline_options import PipelineOptions
+
+
+class BaseFormatOption(BaseModel):
+    """Base class for format options used by _DocumentConversionInput."""
+
+    pipeline_options: Optional[PipelineOptions] = None
+    backend: Type[AbstractDocumentBackend]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
 
 class ConversionStatus(str, Enum):
     PENDING = "pending"
@@ -56,6 +68,7 @@ class InputFormat(str, Enum):
     XLSX = "xlsx"
     XML_USPTO = "xml_uspto"
     XML_JATS = "xml_jats"
+    METS_GBS = "mets_gbs"
     JSON_DOCLING = "json_docling"
     AUDIO = "audio"
 
@@ -81,6 +94,7 @@ FormatToExtensions: Dict[InputFormat, List[str]] = {
     InputFormat.CSV: ["csv"],
     InputFormat.XLSX: ["xlsx", "xlsm"],
     InputFormat.XML_USPTO: ["xml", "txt"],
+    InputFormat.METS_GBS: ["tar.gz"],
     InputFormat.JSON_DOCLING: ["json"],
     InputFormat.AUDIO: ["wav", "mp3"],
 }
@@ -113,6 +127,7 @@ FormatToMimeType: Dict[InputFormat, List[str]] = {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ],
     InputFormat.XML_USPTO: ["application/xml", "text/plain"],
+    InputFormat.METS_GBS: ["application/mets+xml"],
     InputFormat.JSON_DOCLING: ["application/json"],
     InputFormat.AUDIO: ["audio/x-wav", "audio/mpeg", "audio/wav", "audio/mp3"],
 }
