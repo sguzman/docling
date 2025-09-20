@@ -24,9 +24,31 @@
             });
         };
 
+        # e.g. overlays = [ overlayTorch rapidocrNoCheckOverlay ];
+        rapidocrNoCheckOverlay = final: prev: {
+          # Cover both names users might reach for
+          python3Packages = prev.python3Packages // {
+            rapidocr-onnxruntime =
+              prev.python3Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
+                doCheck = false;
+                nativeCheckInputs = [ ];
+                checkPhase = "true";
+              });
+          };
+          python312Packages = prev.python312Packages // {
+            rapidocr-onnxruntime =
+              prev.python312Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
+                doCheck = false;
+                nativeCheckInputs = [ ];
+                checkPhase = "true";
+              });
+          };
+        };
+
+
         pkgsCuda = import nixpkgs {
           inherit system;
-          overlays = [overlayTorch];
+          overlays = [overlayTorch rapidocrNoCheckOverlay];
           config = {
             allowUnfree = true;
             cudaSupport = true;
@@ -83,9 +105,31 @@
             });
         };
 
+        # e.g. overlays = [ overlayTorch rapidocrNoCheckOverlay ];
+        rapidocrNoCheckOverlay = final: prev: {
+          # Cover both names users might reach for
+          python3Packages = prev.python3Packages // {
+            rapidocr-onnxruntime =
+              prev.python3Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
+                doCheck = false;
+                nativeCheckInputs = [ ];
+                checkPhase = "true";
+              });
+          };
+          python312Packages = prev.python312Packages // {
+            rapidocr-onnxruntime =
+              prev.python312Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
+                doCheck = false;
+                nativeCheckInputs = [ ];
+                checkPhase = "true";
+              });
+          };
+        };
+
+
         pkgsCuda = import nixpkgs {
           inherit system;
-          overlays = [overlayTorch];
+          overlays = [overlayTorch rapidocrNoCheckOverlay];
           config = {
             allowUnfree = true;
             cudaSupport = true;
