@@ -33,11 +33,6 @@
           };
         };
 
-        pkgsCpu = import nixpkgs {
-          inherit system;
-          config = {allowUnfree = true;};
-        };
-
         doclingEnv = pkgsCuda.python312.withPackages (ps:
           with ps; [
             docling
@@ -97,43 +92,7 @@
           };
         };
 
-        pkgsCpu = import nixpkgs {
-          inherit system;
-          config = {allowUnfree = true;};
-        };
-
         doclingEnvCuda = pkgsCuda.python312.withPackages (ps:
-          with ps; [
-            docling
-            docling-core
-            docling-parse
-            docling-ibm-models
-            easyocr
-            opencv4
-            accelerate
-            beautifulsoup4
-            certifi
-            filetype
-            huggingface-hub
-            numpy
-            packaging
-            pillow
-            pydantic
-            pypdf
-            pyyaml
-            requests
-            scikit-image
-            scipy
-            shapely
-            tiktoken
-            tqdm
-            typing-extensions
-            torch
-            torchvision
-            torchaudio
-          ]);
-
-        doclingEnvCpu = pkgsCpu.python312.withPackages (ps:
           with ps; [
             docling
             docling-core
@@ -204,12 +163,6 @@
 
         # Explicit aliases
         cuda = self.devShells.${system}.default;
-
-        # CPU shell
-        cpu = pkgsCpu.mkShell {
-          packages = [doclingEnvCpu];
-          shellHook = ''echo "CPU dev shell ready." '';
-        };
       }
     );
 
