@@ -24,27 +24,23 @@
             });
         };
 
-        # e.g. overlays = [ overlayTorch rapidocrNoCheckOverlay ];
+        # disable pytest for rapidocr-onnxruntime everywhere
         rapidocrNoCheckOverlay = final: prev: {
-          # Cover both names users might reach for
-          python3Packages = prev.python3Packages // {
-            rapidocr-onnxruntime =
-              prev.python3Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
-                doCheck = false;
-                nativeCheckInputs = [ ];
-                checkPhase = "true";
-              });
-          };
-          python312Packages = prev.python312Packages // {
-            rapidocr-onnxruntime =
-              prev.python312Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
-                doCheck = false;
-                nativeCheckInputs = [ ];
-                checkPhase = "true";
-              });
-          };
+          python3Packages = prev.python3Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
+          python312Packages = prev.python312Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
         };
-
 
         pkgsCuda = import nixpkgs {
           inherit system;
@@ -105,27 +101,23 @@
             });
         };
 
-        # e.g. overlays = [ overlayTorch rapidocrNoCheckOverlay ];
+        # disable pytest for rapidocr-onnxruntime everywhere
         rapidocrNoCheckOverlay = final: prev: {
-          # Cover both names users might reach for
-          python3Packages = prev.python3Packages // {
-            rapidocr-onnxruntime =
-              prev.python3Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
-                doCheck = false;
-                nativeCheckInputs = [ ];
-                checkPhase = "true";
-              });
-          };
-          python312Packages = prev.python312Packages // {
-            rapidocr-onnxruntime =
-              prev.python312Packages.rapidocr-onnxruntime.overridePythonAttrs (old: {
-                doCheck = false;
-                nativeCheckInputs = [ ];
-                checkPhase = "true";
-              });
-          };
+          python3Packages = prev.python3Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
+          python312Packages = prev.python312Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
         };
-
 
         pkgsCuda = import nixpkgs {
           inherit system;
