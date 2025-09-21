@@ -24,7 +24,6 @@
             });
         };
 
-        # disable pytest for rapidocr-onnxruntime everywhere
         rapidocrNoCheckOverlay = final: prev: {
           python3Packages = prev.python3Packages.overrideScope (self: super: {
             "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
@@ -51,8 +50,16 @@
           };
         };
 
-        doclingEnv = pkgsCuda.python312.withPackages (ps:
-          with ps; [
+        doclingEnv = pkgsCuda.python312.withPackages (ps: let
+          ps' = ps.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
+        in
+          with ps'; [
             docling
             docling-core
             docling-parse
@@ -101,7 +108,6 @@
             });
         };
 
-        # disable pytest for rapidocr-onnxruntime everywhere
         rapidocrNoCheckOverlay = final: prev: {
           python3Packages = prev.python3Packages.overrideScope (self: super: {
             "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
