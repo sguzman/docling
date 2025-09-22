@@ -106,9 +106,7 @@
 
         # Reproducible virtualenv containing locked runtime deps
         doclingEnv =
-          pythonSet.mkVirtualEnv
-          (doclingPkg.pname + "-env")
-          workspace.deps.default;
+          pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") ["default"];
         # -----------------------------------------------------------------------
       in {
         # Keep your exports: env as a package + default
@@ -178,7 +176,7 @@
         ]);
         projectName = "docling";
         doclingPkg = pythonSet.${projectName};
-        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
+        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") ["default"];
 
         cudaLibs = with pkgsCuda; [
           stdenv.cc.cc
