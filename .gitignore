@@ -441,3 +441,4 @@ pip-selfcheck.json
 # docs/**/*.svg
 /result
 *.pdf
+*.md
