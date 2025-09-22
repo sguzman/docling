@@ -108,7 +108,7 @@
         # NEW (explicit deps spec, no 'all')
         doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
           groups = ["default"]; # attrset of group names
-          extras = {}; # attrset of extra names (empty = none)
+          extras = []; # attrset of extra names (empty = none)
         };
         # -----------------------------------------------------------------------
       in {
@@ -181,7 +181,7 @@
         doclingPkg = pythonSet.${projectName};
         doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
           groups = ["default"]; # attrset of group names
-          extras = {}; # attrset of extra names (empty = none)
+          extras = []; # attrset of extra names (empty = none)
         };
 
         cudaLibs = with pkgsCuda; [
