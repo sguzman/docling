@@ -1,11 +1,30 @@
 {
-  description = "Docling + CUDA dev shells";
+  description = "Docling + CUDA dev shells (uv2nix vendored deps)";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+
+    # Added: uv2nix + friends for Python packaging via uv.lock
+    pyproject-nix.url = "github:pyproject-nix/pyproject.nix";
+    uv2nix.url = "github:pyproject-nix/uv2nix";
+    pyproject-build-systems.url = "github:pyproject-nix/build-system-pkgs";
+
+    # Keep inputs aligned with nixpkgs
+    pyproject-nix.inputs.nixpkgs.follows = "nixpkgs";
+    uv2nix.inputs.nixpkgs.follows = "nixpkgs";
+    pyproject-build-systems.inputs.nixpkgs.follows = "nixpkgs";
+
+    uv2nix.inputs.pyproject-nix.follows = "pyproject-nix";
+    pyproject-build-systems.inputs.pyproject-nix.follows = "pyproject-nix";
+  };
 
   outputs = {
     self,
     nixpkgs,
+    pyproject-nix,
+    uv2nix,
+    pyproject-build-systems,
+    ...
   }: let
     systems = ["x86_64-linux" "aarch64-linux"];
     forEachSystem = nixpkgs.lib.genAttrs systems;
@@ -50,47 +69,54 @@
           };
         };
 
-        doclingEnv = pkgsCuda.python312.withPackages (ps: let
-          ps' = ps.overrideScope (self: super: {
-            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+        # ---------------- uv2nix wiring (replaces python.withPackages) ----------------
+        python = pkgsCuda.python312;
+
+        # Reads pyproject.toml + uv.lock from repo root
+        workspace = uv2nix.lib.workspace.loadWorkspace {
+          workspaceRoot = ./.;
+        };
+
+        # Convert uv.lock into a pinned overlay of Python packages
+        uvLockedOverlay = workspace.mkPyprojectOverlay {
+          sourcePreference = "wheel"; # switch to "sdist" if needed
+        };
+
+        # Compose Python pkg set with pyproject-nix + build systems + uv-locked deps
+        pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
+          .overrideScope (pkgsCuda.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          uvLockedOverlay
+
+          # Keep the rapidocr test-disable at python layer too (belt & suspenders)
+          (final: prev: {
+            "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
               doCheck = false;
               nativeCheckInputs = [];
               checkPhase = "true";
             });
-          });
-        in
-          with ps'; [
-            docling
-            docling-core
-            docling-parse
-            docling-ibm-models
-            easyocr
-            opencv4
-            accelerate
-            beautifulsoup4
-            certifi
-            filetype
-            huggingface-hub
-            numpy
-            packaging
-            pillow
-            pydantic
-            pypdf
-            pyyaml
-            requests
-            scikit-image
-            scipy
-            shapely
-            tiktoken
-            tqdm
-            typing-extensions
-            torch
-            torchvision
-            torchaudio
-          ]);
+          })
+        ]);
+
+        # Must match [project.name] in your pyproject.toml
+        projectName = "docling";
+
+        # Buildable wheel/sdist for your project
+        doclingPkg = pythonSet.${projectName};
+
+        # Reproducible virtualenv containing locked runtime deps
+        doclingEnv =
+          pythonSet.mkVirtualEnv
+          (doclingPkg.pname + "-env")
+          workspace.deps.default;
+        # -----------------------------------------------------------------------
       in {
+        # Keep your exports: env as a package + default
         doclingEnv = doclingEnv;
         default = doclingEnv;
+
+        # Also expose the buildable package (wheel/sdist) if you want it:
+        "${projectName}-pkg" = doclingPkg;
       }
     );
 
@@ -134,36 +160,25 @@
           };
         };
 
-        doclingEnvCuda = pkgsCuda.python312.withPackages (ps:
-          with ps; [
-            docling
-            docling-core
-            docling-parse
-            docling-ibm-models
-            easyocr
-            opencv4
-            accelerate
-            beautifulsoup4
-            certifi
-            filetype
-            huggingface-hub
-            numpy
-            packaging
-            pillow
-            pydantic
-            pypdf
-            pyyaml
-            requests
-            scikit-image
-            scipy
-            shapely
-            tiktoken
-            tqdm
-            typing-extensions
-            torch
-            torchvision
-            torchaudio
-          ]);
+        # Recreate the same uv2nix env in devShell scope
+        python = pkgsCuda.python312;
+        workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
+        uvLockedOverlay = workspace.mkPyprojectOverlay {sourcePreference = "wheel";};
+        pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
+          .overrideScope (pkgsCuda.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          uvLockedOverlay
+          (final: prev: {
+            "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          })
+        ]);
+        projectName = "docling";
+        doclingPkg = pythonSet.${projectName};
+        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
 
         cudaLibs = with pkgsCuda; [
           stdenv.cc.cc
@@ -179,13 +194,16 @@
           cudaPackages.nccl
         ];
       in {
-        # CUDA shell
+        # CUDA shell (now using the uv2nix-built env instead of withPackages)
         default = pkgsCuda.mkShell {
           packages = [
             doclingEnvCuda
             pkgsCuda.cudaPackages.cudatoolkit
             pkgsCuda.cudaPackages.cudnn
             pkgsCuda.cudaPackages.nccl
+            pkgsCuda.uv
+            pkgsCuda.ruff
+            pkgsCuda.pyright
           ];
 
           LD_LIBRARY_PATH = pkgsCuda.lib.makeLibraryPath cudaLibs;
@@ -193,17 +211,22 @@
           CUDA_HOME = pkgsCuda.cudaPackages.cudatoolkit;
 
           shellHook = ''
-                        echo "CUDA dev shell ready — checking torch:"
-                        python - <<'PY'
+            echo "CUDA dev shell ready — checking torch (uv2nix env):"
+            python - <<'PY'
             import os, torch
             print("torch:", torch.__version__)
             print("CUDA available:", torch.cuda.is_available())
             print("torch.version.cuda:", torch.version.cuda)
             PY
+
+            echo
+            echo "Tip:"
+            echo "  • After changing deps: uv lock"
+            echo "  • Prefetch/store deps: nix build .#doclingEnv"
           '';
         };
 
-        # Explicit aliases
+        # Explicit alias mirroring your original pattern
         cuda = self.devShells.${system}.default;
       }
     );
