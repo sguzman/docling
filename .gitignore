@@ -442,3 +442,4 @@ pip-selfcheck.json
 /result
 *.pdf
 *.md
+*.json
