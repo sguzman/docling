@@ -180,7 +180,7 @@
         projectName = "docling";
         doclingPkg = pythonSet.${projectName};
         doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
-          groups = {default = {};}; # attrset of group names
+          groups = ["default"]; # attrset of group names
           extras = {}; # attrset of extra names (empty = none)
         };
 
