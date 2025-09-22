@@ -107,7 +107,7 @@
         # Reproducible virtualenv containing locked runtime deps
         # NEW (explicit deps spec, no 'all')
         doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
-          groups = {default = {};}; # attrset of group names
+          groups = ["default"]; # attrset of group names
           extras = {}; # attrset of extra names (empty = none)
         };
         # -----------------------------------------------------------------------
