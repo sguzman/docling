@@ -29,41 +29,76 @@
     systems = ["x86_64-linux" "aarch64-linux"];
     forEachSystem = nixpkgs.lib.genAttrs systems;
   in {
-    packages = forEachSystem (system: let
-      pkgsCuda = import nixpkgs {
-        inherit system;
-        overlays = [rapidocrNoCheckOverlay]; # no overlayTorch here
-        config = {
-          allowUnfree = true;
-          cudaSupport = true;
-        };
-      };
-      python = pkgsCuda.python312;
-      workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
-      uvLockedOverlay = workspace.mkPyprojectOverlay {sourcePreference = "wheel";};
-      pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
-        .overrideScope (pkgsCuda.lib.composeManyExtensions [
-        pyproject-build-systems.overlays.default
-        uvLockedOverlay
-        (final: prev: {
-          "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
-            doCheck = false;
-            nativeCheckInputs = [];
-            checkPhase = "true";
+    packages = forEachSystem (
+      system: let
+        # Define the overlay in THIS scope (was missing)
+        rapidocrNoCheckOverlay = final: prev: {
+          python3Packages = prev.python3Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
           });
-        })
-      ]);
-      projectName = "docling";
-      doclingPkg = pythonSet.${projectName};
-      doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
-        groups = ["default"];
-        extras = [];
-      };
-    in {
-      doclingEnv = doclingEnv;
-      default = doclingEnv;
-      "${projectName}-pkg" = doclingPkg;
-    });
+          python312Packages = prev.python312Packages.overrideScope (self: super: {
+            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          });
+        };
+
+        # NOTE: intentionally NO overlayTorch here to avoid breaking uv2nix metadata
+        pkgsCuda = import nixpkgs {
+          inherit system;
+          overlays = [rapidocrNoCheckOverlay];
+          config = {
+            allowUnfree = true;
+            cudaSupport = true;
+          };
+        };
+
+        python = pkgsCuda.python312;
+
+        # uv2nix: read pyproject.toml + uv.lock
+        workspace = uv2nix.lib.workspace.loadWorkspace {
+          workspaceRoot = ./.;
+        };
+
+        # Turn the lock into a pinned overlay
+        uvLockedOverlay = workspace.mkPyprojectOverlay {
+          sourcePreference = "wheel";
+        };
+
+        # Compose python set with pyproject-nix + build systems + uv-locked deps
+        pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
+          .overrideScope (pkgsCuda.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          uvLockedOverlay
+          (final: prev: {
+            "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          })
+        ]);
+
+        projectName = "docling"; # change if your [project.name] differs
+        doclingPkg = pythonSet.${projectName};
+
+        # Explicit deps spec (lists) -> avoids the 'all' and shape errors
+        doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
+          groups = ["default"];
+          extras = [];
+        };
+      in {
+        doclingEnv = doclingEnv;
+        default = doclingEnv;
+        "${projectName}-pkg" = doclingPkg;
+      }
+    );
 
     devShells = forEachSystem (
       system: let
