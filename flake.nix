@@ -89,10 +89,7 @@
         doclingPkg = pythonSet.${projectName};
 
         # Explicit deps spec (lists) -> avoids the 'all' and shape errors
-        doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
-          groups = ["default"];
-          extras = [];
-        };
+        doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
       in {
         doclingEnv = doclingEnv;
         default = doclingEnv;
@@ -148,10 +145,7 @@
 
         projectName = "docling";
         doclingPkg = pythonSet.${projectName};
-        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") {
-          groups = ["default"];
-          extras = [];
-        };
+        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
 
         # Bring CUDA-enabled torch at SHELL layer (not inside uv graph)
         torchBin = pkgsCuda.python312Packages.torch-bin;
