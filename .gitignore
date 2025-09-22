@@ -440,3 +440,4 @@ pip-selfcheck.json
 # docs/**/*.png
 # docs/**/*.svg
 /result
+*.pdf
