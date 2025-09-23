@@ -1,29 +1,37 @@
 {
-  description = "Docling + CUDA dev shells";
+  description = "Docling + CUDA dev shells (uv2nix vendored deps)";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+
+    # Added: uv2nix + friends for Python packaging via uv.lock
+    pyproject-nix.url = "github:pyproject-nix/pyproject.nix";
+    uv2nix.url = "github:pyproject-nix/uv2nix";
+    pyproject-build-systems.url = "github:pyproject-nix/build-system-pkgs";
+
+    # Keep inputs aligned with nixpkgs
+    pyproject-nix.inputs.nixpkgs.follows = "nixpkgs";
+    uv2nix.inputs.nixpkgs.follows = "nixpkgs";
+    pyproject-build-systems.inputs.nixpkgs.follows = "nixpkgs";
+
+    uv2nix.inputs.pyproject-nix.follows = "pyproject-nix";
+    pyproject-build-systems.inputs.pyproject-nix.follows = "pyproject-nix";
+  };
 
   outputs = {
     self,
     nixpkgs,
+    pyproject-nix,
+    uv2nix,
+    pyproject-build-systems,
+    ...
   }: let
     systems = ["x86_64-linux" "aarch64-linux"];
     forEachSystem = nixpkgs.lib.genAttrs systems;
   in {
     packages = forEachSystem (
       system: let
-        overlayTorch = final: prev: let
-          lib = prev.lib or nixpkgs.lib;
-        in {
-          python312Packages =
-            prev.python312Packages
-            // (lib.optionalAttrs (prev.python312Packages ? torch-bin) {
-              torch = prev.python312Packages.torch-bin;
-              torchvision = prev.python312Packages.torchvision-bin;
-              torchaudio = prev.python312Packages.torchaudio-bin;
-            });
-        };
-
+        # Define the overlay in THIS scope (was missing)
         rapidocrNoCheckOverlay = final: prev: {
           python3Packages = prev.python3Packages.overrideScope (self: super: {
             "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
@@ -41,73 +49,57 @@
           });
         };
 
+        # NOTE: intentionally NO overlayTorch here to avoid breaking uv2nix metadata
         pkgsCuda = import nixpkgs {
           inherit system;
-          overlays = [overlayTorch rapidocrNoCheckOverlay];
+          overlays = [rapidocrNoCheckOverlay];
           config = {
             allowUnfree = true;
             cudaSupport = true;
           };
         };
 
-        doclingEnv = pkgsCuda.python312.withPackages (ps: let
-          ps' = ps.overrideScope (self: super: {
-            "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
+        python = pkgsCuda.python312;
+
+        # uv2nix: read pyproject.toml + uv.lock
+        workspace = uv2nix.lib.workspace.loadWorkspace {
+          workspaceRoot = ./.;
+        };
+
+        # Turn the lock into a pinned overlay
+        uvLockedOverlay = workspace.mkPyprojectOverlay {
+          sourcePreference = "wheel";
+        };
+
+        # Compose python set with pyproject-nix + build systems + uv-locked deps
+        pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
+          .overrideScope (pkgsCuda.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          uvLockedOverlay
+          (final: prev: {
+            "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
               doCheck = false;
               nativeCheckInputs = [];
               checkPhase = "true";
             });
-          });
-        in
-          with ps'; [
-            docling
-            docling-core
-            docling-parse
-            docling-ibm-models
-            easyocr
-            opencv4
-            accelerate
-            beautifulsoup4
-            certifi
-            filetype
-            huggingface-hub
-            numpy
-            packaging
-            pillow
-            pydantic
-            pypdf
-            pyyaml
-            requests
-            scikit-image
-            scipy
-            shapely
-            tiktoken
-            tqdm
-            typing-extensions
-            torch
-            torchvision
-            torchaudio
-          ]);
+          })
+        ]);
+
+        projectName = "docling"; # change if your [project.name] differs
+        doclingPkg = pythonSet.${projectName};
+
+        # Explicit deps spec (lists) -> avoids the 'all' and shape errors
+        doclingEnv = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
       in {
         doclingEnv = doclingEnv;
         default = doclingEnv;
+        "${projectName}-pkg" = doclingPkg;
       }
     );
 
     devShells = forEachSystem (
       system: let
-        overlayTorch = final: prev: let
-          lib = prev.lib or nixpkgs.lib;
-        in {
-          python312Packages =
-            prev.python312Packages
-            // (lib.optionalAttrs (prev.python312Packages ? torch-bin) {
-              torch = prev.python312Packages.torch-bin;
-              torchvision = prev.python312Packages.torchvision-bin;
-              torchaudio = prev.python312Packages.torchaudio-bin;
-            });
-        };
-
+        # KEEP: your rapidocr overlay; DROP overlayTorch from the uv2nix build path
         rapidocrNoCheckOverlay = final: prev: {
           python3Packages = prev.python3Packages.overrideScope (self: super: {
             "rapidocr-onnxruntime" = super."rapidocr-onnxruntime".overridePythonAttrs (_: {
@@ -127,43 +119,42 @@
 
         pkgsCuda = import nixpkgs {
           inherit system;
-          overlays = [overlayTorch rapidocrNoCheckOverlay];
+          overlays = [rapidocrNoCheckOverlay]; # <-- dropped overlayTorch here
           config = {
             allowUnfree = true;
             cudaSupport = true;
           };
         };
 
-        doclingEnvCuda = pkgsCuda.python312.withPackages (ps:
-          with ps; [
-            docling
-            docling-core
-            docling-parse
-            docling-ibm-models
-            easyocr
-            opencv4
-            accelerate
-            beautifulsoup4
-            certifi
-            filetype
-            huggingface-hub
-            numpy
-            packaging
-            pillow
-            pydantic
-            pypdf
-            pyyaml
-            requests
-            scikit-image
-            scipy
-            shapely
-            tiktoken
-            tqdm
-            typing-extensions
-            torch
-            torchvision
-            torchaudio
-          ]);
+        # uv2nix env (same as before, BUT built without overlayTorch interfering)
+        python = pkgsCuda.python312;
+        workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
+        uvLockedOverlay = workspace.mkPyprojectOverlay {sourcePreference = "wheel";};
+        pythonSet = (pkgsCuda.callPackage pyproject-nix.build.packages {inherit python;})
+          .overrideScope (pkgsCuda.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          uvLockedOverlay
+          (final: prev: {
+            "rapidocr-onnxruntime" = prev."rapidocr-onnxruntime".overridePythonAttrs (_: {
+              doCheck = false;
+              nativeCheckInputs = [];
+              checkPhase = "true";
+            });
+          })
+        ]);
+
+        projectName = "docling";
+        doclingPkg = pythonSet.${projectName};
+        doclingEnvCuda = pythonSet.mkVirtualEnv (doclingPkg.pname + "-env") workspace.deps.default;
+
+        # Bring CUDA-enabled torch at SHELL layer (not inside uv graph)
+        torchBin = pkgsCuda.python312Packages.torch-bin;
+        torchvisionBin = pkgsCuda.python312Packages.torchvision-bin;
+        torchaudioBin = pkgsCuda.python312Packages.torchaudio-bin;
+
+        # Site-packages paths to compose PYTHONPATH
+        pyVer = pkgsCuda.python312.lib.pythonVersion; # e.g. "3.12"
+        site = p: "${p}/lib/python${pyVer}/site-packages";
 
         cudaLibs = with pkgsCuda; [
           stdenv.cc.cc
@@ -179,13 +170,26 @@
           cudaPackages.nccl
         ];
       in {
-        # CUDA shell
         default = pkgsCuda.mkShell {
           packages = [
             doclingEnvCuda
             pkgsCuda.cudaPackages.cudatoolkit
             pkgsCuda.cudaPackages.cudnn
             pkgsCuda.cudaPackages.nccl
+            torchBin
+            torchvisionBin
+            torchaudioBin
+            pkgsCuda.uv
+            pkgsCuda.ruff
+            pkgsCuda.pyright
+          ];
+
+          # Make uv2nix venv see CUDA torch
+          PYTHONPATH = pkgsCuda.lib.makeSearchPath "lib/python${pyVer}/site-packages" [
+            (site doclingEnvCuda)
+            (site torchBin)
+            (site torchvisionBin)
+            (site torchaudioBin)
           ];
 
           LD_LIBRARY_PATH = pkgsCuda.lib.makeLibraryPath cudaLibs;
@@ -193,9 +197,10 @@
           CUDA_HOME = pkgsCuda.cudaPackages.cudatoolkit;
 
           shellHook = ''
-                        echo "CUDA dev shell ready — checking torch:"
-                        python - <<'PY'
-            import os, torch
+                    echo "CUDA dev shell — checking torch (uv env + torch-bin on PYTHONPATH):"
+                    python - <<'PY'
+            import sys, torch
+            print("python:", sys.version.split()[0])
             print("torch:", torch.__version__)
             print("CUDA available:", torch.cuda.is_available())
             print("torch.version.cuda:", torch.version.cuda)
@@ -203,7 +208,6 @@
           '';
         };
 
-        # Explicit aliases
         cuda = self.devShells.${system}.default;
       }
     );
