@@ -151,7 +151,6 @@ constraints = [
 
 [tool.uv]
 package = true
-default-groups = ["all"]
 
 [tool.setuptools.packages.find]
 include = ["docling*"]
